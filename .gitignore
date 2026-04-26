@@ -1,0 +1,10 @@
+# Generated output files — run the code to reproduce these locally
+*_predicted.csv
+
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+
+# VS Code settings
+.vscode/

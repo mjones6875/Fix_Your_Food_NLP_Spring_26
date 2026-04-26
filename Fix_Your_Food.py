@@ -117,7 +117,7 @@ def load_and_filter_reviews(
     """
     Load CSV, clean text, filter short reviews, and map categories.
     Args:
-        csv_path: Path to foodreviewdata.csv
+        csv_path: Path to the labeled CSV file used for training (e.g. TestSampleData.csv)
         text_col: Column name containing review text (default: "Comment")
         category_col: Column name containing category labels (default: "Category")
     Returns:
@@ -168,13 +168,17 @@ def load_and_filter_reviews(
 # ================================================================================
 # CELL 3: Load & Inspect Data
 # ================================================================================
-# Load the foodreviewdata.csv, clean reviews, map categories, and filter.
+# Two data sources are used:
+#   - TRAIN_CSV (TestSampleData.csv): pre-labeled reviews used to train the model
+#   - INFERENCE_CSV (mcdonaldsfoodreviews.csv): real production reviews with no labels
+# The model learns from TRAIN_CSV and applies predictions to INFERENCE_CSV.
 
-CSV_PATH = "foodreviewdata.csv"
+TRAIN_CSV = "TestSampleData.csv"        # Labeled data → trains the model
+INFERENCE_CSV = "mcdonaldsfoodreviews.csv"  # Production data → receives predictions
 
 # Load with standard column names for our dataset
 df = load_and_filter_reviews(
-    csv_path=CSV_PATH,
+    csv_path=TRAIN_CSV,
     text_col="Comment",        # Review text column
     category_col="Category"    # Topic category column
 )
@@ -509,9 +513,15 @@ if model:
     print("Generating Predictions on Full Dataset")
     print("="*70)
     
+    # Load production data directly — bypasses load_and_filter_reviews() because
+    # INFERENCE_CSV has no Category labels to map, so filtering would drop all rows.
+    # We only need clean text; the model handles everything else.
+    df_inference = pd.read_csv(INFERENCE_CSV)
+    df_inference["Comment"] = df_inference["Comment"].astype(str).apply(basic_clean)  # normalize text same as training
+
     # Copy data and add predictions
-    df_pred = df.copy()
-    df_pred["pred_topic"] = model.predict(df_pred["Comment"].astype(str).tolist())
+    df_pred = df_inference.copy()
+    df_pred["pred_topic"] = model.predict(df_pred["Comment"].tolist())
     
     # Verify predictions exist
     print(f"Predictions generated for {len(df_pred)} reviews")
@@ -521,6 +531,22 @@ if model:
 else:
     print("No model available; skipping predictions.")
     df_pred = None
+
+# ================================================================================
+# CELL 12b: Export Predictions to CSV
+# ================================================================================
+# Writes pred_topic back as a new column in a separate output CSV.
+# Raw input CSV is intentionally preserved; teammates write their own output CSVs.
+# main.py will merge all team output files for final cross-analysis.
+
+OUTPUT_CSV = "mcdonaldsfoodreviews_predicted.csv"  # New file — raw source CSV is never overwritten
+
+if df_pred is not None:
+    df_pred.to_csv(OUTPUT_CSV, index=False)
+    print(f"[Export] Predictions written to '{OUTPUT_CSV}' ({len(df_pred)} rows, {len(df_pred.columns)} columns)")
+    print(f"         Columns: {list(df_pred.columns)}")
+else:
+    print("[Export] No predictions available; skipping CSV export.")
 
 
 # ================================================================================
