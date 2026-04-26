@@ -13,10 +13,6 @@
 # **VALIDATION:** Stratified 80/20 holdout. Metrics: Macro-F1 + per-class F1
 # **DATA FILTER:** Only reviews with 5+ words are included.
 #
-# **TEAM NOTES:**
-#  - Sentiment Analysis team: We output pred_topic; you can filter by rating.
-#  - Other teams: Join on review text or index for cross-analysis.
-#  - GitHub: Please comment on PRs with feature requests or data issues.
 # ================================================================================
 
 # ================================================================================
@@ -74,7 +70,7 @@ RANDOM_SEED = 42  # For reproducibility across runs
 # CELL 2: Helper Functions (Text Cleaning + Filtering)
 # ================================================================================
 # These functions handle data validation, cleaning, and filtering.
-# helps with the heavy lifting done by TF-IDF vectorizer.
+# helps with the heavy lifting done by TF-IDF.
 
 def word_count(text: str) -> int:
     """Count words in text string. Returns 0 for non-strings."""
@@ -515,18 +511,30 @@ if model:
     
     # Load production data directly — bypasses load_and_filter_reviews() because
     # INFERENCE_CSV has no Category labels to map, so filtering would drop all rows.
-    # We only need clean text; the model handles everything else.
+    # We clean text and apply the same word count threshold used on training data.
     df_inference = pd.read_csv(INFERENCE_CSV)
     df_inference["Comment"] = df_inference["Comment"].astype(str).apply(basic_clean)  # normalize text same as training
+    # Compute word counts as a temporary variable — used for filtering only, never added to DataFrame
+    wc = df_inference["Comment"].apply(word_count)
 
-    # Copy data and add predictions
+    # Copy data and prepare Category column
     df_pred = df_inference.copy()
-    df_pred["pred_topic"] = model.predict(df_pred["Comment"].tolist())
-    
-    # Verify predictions exist
-    print(f"Predictions generated for {len(df_pred)} reviews")
+    df_pred["Category"] = None  # default all rows to no category
+
+    # Only predict on reviews that meet the MIN_WORDS threshold — same rule as training data.
+    # Blank or very short reviews stay as None; predicting on them would produce meaningless results.
+    valid_mask = wc >= MIN_WORDS
+    df_pred.loc[valid_mask, "Category"] = model.predict(
+        df_pred.loc[valid_mask, "Comment"].tolist()
+    )
+
+    # Verify predictions — report how many were predicted vs skipped
+    predicted_count = valid_mask.sum()
+    skipped_count = (~valid_mask).sum()
+    print(f"Reviews predicted : {predicted_count}")
+    print(f"Skipped (under {MIN_WORDS} words): {skipped_count}")
     print(f"Topic distribution in predictions:")
-    print(df_pred["pred_topic"].value_counts())
+    print(df_pred["Category"].value_counts())
     print()
 else:
     print("No model available; skipping predictions.")
@@ -535,9 +543,9 @@ else:
 # ================================================================================
 # CELL 12b: Export Predictions to CSV
 # ================================================================================
-# Writes pred_topic back as a new column in a separate output CSV.
+# Fills the Category column with model predictions and writes to a separate output CSV.
 # Raw input CSV is intentionally preserved; teammates write their own output CSVs.
-# main.py will merge all team output files for final cross-analysis.
+# main.py will merge all team output files for final analysis.
 
 OUTPUT_CSV = "mcdonaldsfoodreviews_predicted.csv"  # New file — raw source CSV is never overwritten
 
@@ -568,9 +576,9 @@ if df_pred is not None and "StarRating" in df_pred.columns:
     # Compute critical score per topic
     critical = (
         df_pred.dropna(subset=["severity"])
-              .groupby("pred_topic")
+              .groupby("Category")
               .agg(
-                  freq=("pred_topic", "count"),
+                  freq=("Category", "count"),
                   avg_severity=("severity", "mean"),
                   avg_rating=("rating_num", "mean")
               )
