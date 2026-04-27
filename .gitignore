@@ -1,5 +1,17 @@
 # Generated output files — run the code to reproduce these locally
 *_predicted.csv
+*_sentiment.csv
+*_advice.csv
+*_final.csv
+
+# GloVe embeddings — too large for repo, each person downloads their own copy
+glove.6B.*
+
+# Colab test versions — not part of the project, local only
+*_colab.py
+
+# Session handoff notes — local only
+HANDOFF.md
 
 # Python cache files
 __pycache__/
